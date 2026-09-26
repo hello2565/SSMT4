@@ -100,7 +100,7 @@ fn set_show_window_shortcut_enabled(app: tauri::AppHandle, enabled: bool) {
 // 我们的 run 函数现在主要负责组装（Wiring）
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let run_result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -229,6 +229,37 @@ pub fn run() {
             commands::recycle_bin::move_file_to_recycle_bin,
             commands::recycle_bin::move_dir_to_recycle_bin,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(error) = run_result {
+        report_startup_failure(&error);
+        std::process::exit(1);
+    }
+}
+
+// 主窗口初始为隐藏（visible=false），启动失败时进程会静默退出，
+// 用户表现为"双击没反应"。release 构建没有控制台，panic 信息不可见，
+// 这里用原生 MessageBox 给出可见的失败原因与处理指引。
+fn report_startup_failure(error: &tauri::Error) {
+    let message = format!(
+        "SSMT4 启动失败：{error}\n\n常见原因：\n\
+         1. 未安装 Microsoft Edge WebView2 运行时（Win10/11 一般自带；缺失时请到 \
+         https://developer.microsoft.com/microsoft-edge/webview2/ 下载 Evergreen Standalone x64 安装）\n\
+         2. 程序被 SmartScreen 或杀毒软件拦截（请允许运行或加入信任）\n\
+         3. 安装目录缺少写权限（建议安装到默认的用户目录，而不是 Program Files）",
+    );
+
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+        let text: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+        let caption: Vec<u16> = "SSMT4".encode_utf16().chain(std::iter::once(0)).collect();
+        unsafe {
+            MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_OK | MB_ICONERROR);
+        }
+    }
+
+    #[cfg(not(windows))]
+    eprintln!("{message}");
 }
