@@ -1,7 +1,9 @@
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld"
+# 禁止 target-cpu=native：分发的安装包会在不支持本机扩展指令集的
+# CPU 上直接崩溃（0xC000001D 非法指令，如 Zen3+ 无 AVX-512）。
+# 保持 x86-64 基线指令集以兼容所有 x64 机器。
 rustflags = [
-    "-C", "target-cpu=native",
     "-C", "split-debuginfo=packed"
 ]
 
